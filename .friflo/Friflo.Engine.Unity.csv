@@ -1,0 +1,14 @@
+Friflo.Engine.Unity.GameObjectLink,Component,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Base/GameObjectLink.cs,13,27
+Friflo.Engine.Unity.ReadGoDisabled,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoDisabled.cs,11,17
+Friflo.Engine.Unity.ReadGoEnabled,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoDisabled.cs,40,19
+Friflo.Engine.Unity.WriteGoDisabled,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoDisabled.cs,69,17
+Friflo.Engine.Unity.WriteGoEnabled,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoDisabled.cs,84,17
+Friflo.Engine.Unity.ReadGoName,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoName.cs,9,17
+Friflo.Engine.Unity.WriteGoName,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoName.cs,20,17
+Friflo.Engine.Unity.ReadGoPosition,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoPosition.cs,9,17
+Friflo.Engine.Unity.WriteGoPosition,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoPosition.cs,20,17
+Friflo.Engine.Unity.ReadGoRotation,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoRotation.cs,9,17
+Friflo.Engine.Unity.WriteGoRotation,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoRotation.cs,20,17
+Friflo.Engine.Unity.ReadGoScale,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoScale.cs,9,17
+Friflo.Engine.Unity.WriteGoScale,System,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Systems/GoScale.cs,20,17
+Friflo.Engine.ECS.RotationEuler,Component,F:\Project\FrifloECSDemo\Library/PackageCache/friflo.friflo-ecs-unity@60c019904d/Scripts/Runtime/Base/RotationEuler.cs,16,19

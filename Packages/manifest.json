@@ -1,5 +1,8 @@
 {
   "dependencies": {
+    "com.coplaydev.unity-mcp": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main",
+    "com.tippinggame.f8framework": "https://github.com/TippingGame/F8Framework.git",
+    "friflo.friflo-ecs-unity": "https://github.com/friflo/friflo-ecs-unity.git",
     "com.unity.collab-proxy": "1.17.7",
     "com.unity.feature.development": "1.0.1",
     "com.unity.ide.rider": "3.0.16",
