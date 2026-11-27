@@ -12,6 +12,7 @@ namespace HotUpdate.UI
         UIGame = 2,
         UIGameMenu = 3,
         UIFight = 4,
+        UIRoguelikeCard = 5,
     }
 
     /// <summary>
@@ -27,6 +28,7 @@ namespace HotUpdate.UI
                 { UIID.UIGame, new UIConfig(LayerType.UI, "UIGame") },
                 { UIID.UIGameMenu, new UIConfig(LayerType.PopUp, "UIGameMenu") },
                 { UIID.UIFight, new UIConfig(LayerType.UI, "UIFight") },
+                { UIID.UIRoguelikeCard, new UIConfig(LayerType.PopUp, "UIRoguelikeCard") },
             };
         }
     }

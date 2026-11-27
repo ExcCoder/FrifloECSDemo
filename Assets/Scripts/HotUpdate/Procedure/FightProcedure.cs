@@ -2,19 +2,25 @@ using F8Framework.Core;
 using F8Framework.Launcher;
 using HotUpdate.Core;
 using HotUpdate.ECS;
+using HotUpdate.ECS.Buff;
 using HotUpdate.ECS.Config;
+using HotUpdate.ECS.Lockstep;
 using HotUpdate.UI;
 using UnityEngine;
 
 namespace HotUpdate.Procedure
 {
     /// <summary>
-    /// 战斗流程：按 BenchmarkStageCatalog.CurrentConfig 创建 BattleWorld，支持战斗中零重载热切换关卡或单个优化开关。
+    /// 战斗流程：按 BenchmarkStageCatalog.CurrentConfig 创建 BattleWorld，支持：
+    /// - 战斗中零重载热切换关卡或六大优化开关；
+    /// - 20Hz 帧同步回环（MockRelay）、60fps 渲染插值开关、一键无头高速追帧（200帧/10秒）；
+    /// - 肉鸽升级自动/手动弹出三选一词条（F8 LayerType.PopUp）。
     /// </summary>
     public class FightProcedure : ProcedureNode
     {
         public bool IsPaused { get; private set; }
         public BattleWorld World { get; private set; }
+        public LockstepRunner Lockstep { get; } = new LockstepRunner();
 
         public override void OnInit(ProcedureProcessor processor) { }
 
@@ -40,7 +46,15 @@ namespace HotUpdate.Procedure
                 return;
             }
 
-            World.Update(Time.deltaTime);
+            Lockstep.TickRenderFrame(World, Time.deltaTime);
+
+            // 升级触发肉鸽三选一弹窗（不与系统暂停菜单冲突）
+            if (World.PendingCardPicks > 0
+                && !FF8.UI.Has(UIID.UIRoguelikeCard)
+                && !FF8.UI.Has(UIID.UIGameMenu))
+            {
+                OpenCardSelectionPopup();
+            }
         }
 
         public void SetPaused(bool paused)
@@ -55,6 +69,10 @@ namespace HotUpdate.Procedure
         public void RestartWithConfig(BattleOptimizationConfig newConfig)
         {
             BenchmarkStageCatalog.CurrentConfig = newConfig;
+            if (FF8.UI.Has(UIID.UIRoguelikeCard))
+            {
+                FF8.UI.Close(UIID.UIRoguelikeCard, false);
+            }
             IsPaused = false;
             Time.timeScale = 1f;
             StartWorldWithConfig(newConfig);
@@ -89,6 +107,49 @@ namespace HotUpdate.Procedure
             RestartWithConfig(cfg);
         }
 
+        public void ToggleLockstep20Hz()
+        {
+            Lockstep.UseLockstep20Hz = !Lockstep.UseLockstep20Hz;
+        }
+
+        public void ToggleInterpolation()
+        {
+            Lockstep.EnableInterpolation = !Lockstep.EnableInterpolation;
+        }
+
+        public double TriggerFastForwardCatchup(int frames = 200)
+        {
+            if (World == null) return 0;
+            double elapsedMs = Lockstep.RunHeadlessCatchup(World, frames);
+            World.UpdatePresentation();
+            return elapsedMs;
+        }
+
+        public void OpenCardSelectionPopup()
+        {
+            if (World == null) return;
+            SetPaused(true);
+            if (!FF8.UI.Has(UIID.UIRoguelikeCard))
+            {
+                FF8.UI.Open(UIID.UIRoguelikeCard);
+            }
+        }
+
+        public void ApplySelectedCard(RoguelikeCardId cardId)
+        {
+            World?.ApplyRoguelikeCard(cardId);
+            SetPaused(false);
+        }
+
+        public void DismissCardSelectionPopup()
+        {
+            if (World != null && World.PendingCardPicks > 0)
+            {
+                World.PendingCardPicks--;
+            }
+            SetPaused(false);
+        }
+
         public void SpawnExtraEnemies(int count) => World?.SpawnEnemyBatch(count);
         public void ClearEnemies() => World?.ClearAllEnemies();
 
@@ -98,6 +159,10 @@ namespace HotUpdate.Procedure
             Time.timeScale = 1f;
             DisposeWorld();
 
+            if (FF8.UI.Has(UIID.UIRoguelikeCard))
+            {
+                FF8.UI.Close(UIID.UIRoguelikeCard, false);
+            }
             if (FF8.UI.Has(UIID.UIGameMenu))
             {
                 FF8.UI.Close(UIID.UIGameMenu, false);
@@ -110,6 +175,7 @@ namespace HotUpdate.Procedure
         private void StartWorldWithConfig(BattleOptimizationConfig config)
         {
             DisposeWorld();
+            Lockstep.Reset();
             World = new BattleWorld(config, enablePresentation: true);
             World.SpawnInitialBattle(initialEnemies: config.InitialEnemyCount);
         }

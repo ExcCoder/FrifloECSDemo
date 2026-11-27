@@ -26,11 +26,12 @@ namespace FrifloECSDemo.Editor
 
             Font font = GetDefaultFont();
 
-            // 1. 生成 4 个 UI 预制体
+            // 1. 生成 5 个 UI 预制体
             BuildUILobbyPrefab(font);
             BuildUIGamePrefab(font);
             BuildUIGameMenuPrefab(font);
             BuildUIFightPrefab(font);
+            BuildUIRoguelikeCardPrefab(font);
 
             // 2. 生成基础材质
             Material matLobbyGround = CreateOrUpdateMaterial($"{MaterialDir}/MatLobbyGround.mat", new Color(0.11f, 0.16f, 0.23f));
@@ -226,26 +227,42 @@ namespace FrifloECSDemo.Editor
             GameObject root = CreateFullScreenRoot("UIFight");
             var view = root.AddComponent<UIFightView>();
 
-            // 左上状态统计面板（含单帧 GC 与单位 GameObject 数监控）
-            GameObject statsBox = CreatePanel(root.transform, "TopLeftStats", new Vector2(520, 152), new Color(0.06f, 0.09f, 0.16f, 0.84f));
-            SetRect(statsBox.GetComponent<RectTransform>(), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(280f, -94f), new Vector2(520f, 152f));
+            // 左上状态统计面板（含性能、护盾/免死/等级、帧同步 FrameId 与 64 位 StateHash）
+            GameObject statsBox = CreatePanel(root.transform, "TopLeftStats", new Vector2(560, 192), new Color(0.06f, 0.09f, 0.16f, 0.85f));
+            SetRect(statsBox.GetComponent<RectTransform>(), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(296f, -110f), new Vector2(560f, 192f));
 
-            Text txtStats = CreateText(statsBox.transform, "TxtStats", "FPS: -- | Logic: --ms Render: --ms\n单帧 GC: -- KB | 单位 GameObject: 0\n主控 HP: 500/500 | 小弟: 4/4\n敌人: 0 | 弹道: 0 | 击杀: 0", font, 18, FontStyle.Normal, new Color(0.89f, 0.91f, 0.94f), TextAnchor.MiddleLeft);
-            txtStats.lineSpacing = 1.25f;
-            SetRect(txtStats.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(488f, 134f));
+            Text txtStats = CreateText(statsBox.transform, "TxtStats", "FPS: -- | Logic: --ms Render: --ms | GC: --KB\n渲染: 0 / 视锥剔除: 0 | GO: 0 | 硬碰撞: 0对\n主控 HP: 500/500 护盾:0 免死:1 小弟:4/4\n小队 Lv.1 (0/25) 词条:0 暴击:0 灼烧敌:0\n敌军: 0 | 击杀: 0 | 弹道: 0\n锁步帧: #0 | Hash: 0x00000000", font, 16, FontStyle.Normal, new Color(0.89f, 0.91f, 0.94f), TextAnchor.MiddleLeft);
+            txtStats.lineSpacing = 1.24f;
+            SetRect(txtStats.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(532f, 176f));
 
             // 左上压测刷怪按钮栏
             GameObject stressBar = CreateEmptyRect(root.transform, "StressBar");
-            SetRect(stressBar.GetComponent<RectTransform>(), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(280f, -202f), new Vector2(520f, 48f));
+            SetRect(stressBar.GetComponent<RectTransform>(), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(296f, -236f), new Vector2(560f, 44f));
 
-            Button btnSpawn200 = CreateButton(stressBar.transform, "BtnSpawn200", "+200 敌人", font, 18, new Vector2(160, 44), new Color(0.85f, 0.47f, 0.02f, 0.95f));
-            SetAnchorCenter(btnSpawn200.GetComponent<RectTransform>(), new Vector2(-176f, 0f));
+            Button btnSpawn200 = CreateButton(stressBar.transform, "BtnSpawn200", "+200 敌人", font, 17, new Vector2(176, 40), new Color(0.85f, 0.47f, 0.02f, 0.95f));
+            SetAnchorCenter(btnSpawn200.GetComponent<RectTransform>(), new Vector2(-190f, 0f));
 
-            Button btnSpawn1000 = CreateButton(stressBar.transform, "BtnSpawn1000", "+1000 敌人", font, 18, new Vector2(166, 44), new Color(0.86f, 0.15f, 0.15f, 0.95f));
+            Button btnSpawn1000 = CreateButton(stressBar.transform, "BtnSpawn1000", "+1000 敌人", font, 17, new Vector2(180, 40), new Color(0.86f, 0.15f, 0.15f, 0.95f));
             SetAnchorCenter(btnSpawn1000.GetComponent<RectTransform>(), new Vector2(0f, 0f));
 
-            Button btnClearEnemies = CreateButton(stressBar.transform, "BtnClearEnemies", "清空敌人", font, 18, new Vector2(160, 44), new Color(0.28f, 0.33f, 0.41f, 0.95f));
-            SetAnchorCenter(btnClearEnemies.GetComponent<RectTransform>(), new Vector2(176f, 0f));
+            Button btnClearEnemies = CreateButton(stressBar.transform, "BtnClearEnemies", "清空敌人", font, 17, new Vector2(176, 40), new Color(0.28f, 0.33f, 0.41f, 0.95f));
+            SetAnchorCenter(btnClearEnemies.GetComponent<RectTransform>(), new Vector2(190f, 0f));
+
+            // 左中：帧同步与肉鸽词条教学控制栏（2×2 按钮）
+            GameObject lockstepBar = CreateEmptyRect(root.transform, "LockstepCardBar");
+            SetRect(lockstepBar.GetComponent<RectTransform>(), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(296f, -312f), new Vector2(560f, 92f));
+
+            Button btnToggleLockstep = CreateButton(lockstepBar.transform, "BtnToggleLockstep", "20Hz帧同步: ON", font, 16, new Vector2(272, 40), new Color(0.06f, 0.58f, 0.40f, 0.95f));
+            SetAnchorCenter(btnToggleLockstep.GetComponent<RectTransform>(), new Vector2(-142f, 23f));
+
+            Button btnToggleInterp = CreateButton(lockstepBar.transform, "BtnToggleInterp", "60fps插值: ON", font, 16, new Vector2(272, 40), new Color(0.06f, 0.58f, 0.40f, 0.95f));
+            SetAnchorCenter(btnToggleInterp.GetComponent<RectTransform>(), new Vector2(142f, 23f));
+
+            Button btnFastForward = CreateButton(lockstepBar.transform, "BtnFastForward", "快进追帧 10s (200帧)", font, 16, new Vector2(272, 40), new Color(0.15f, 0.39f, 0.92f, 0.96f));
+            SetAnchorCenter(btnFastForward.GetComponent<RectTransform>(), new Vector2(-142f, -23f));
+
+            Button btnOpenCards = CreateButton(lockstepBar.transform, "BtnOpenCards", "三选一词条 (肉鸽抽卡)", font, 16, new Vector2(272, 40), new Color(0.58f, 0.20f, 0.92f, 0.96f));
+            SetAnchorCenter(btnOpenCards.GetComponent<RectTransform>(), new Vector2(142f, -23f));
 
             // 顶部中央波次横幅
             GameObject waveBox = CreatePanel(root.transform, "TopCenterWave", new Vector2(560, 56), new Color(0.06f, 0.09f, 0.16f, 0.80f));
@@ -309,6 +326,10 @@ namespace FrifloECSDemo.Editor
             so.FindProperty("btnSpawn200").objectReferenceValue = btnSpawn200;
             so.FindProperty("btnSpawn1000").objectReferenceValue = btnSpawn1000;
             so.FindProperty("btnClearEnemies").objectReferenceValue = btnClearEnemies;
+            so.FindProperty("btnToggleLockstep").objectReferenceValue = btnToggleLockstep;
+            so.FindProperty("btnToggleInterp").objectReferenceValue = btnToggleInterp;
+            so.FindProperty("btnFastForward").objectReferenceValue = btnFastForward;
+            so.FindProperty("btnOpenCards").objectReferenceValue = btnOpenCards;
             so.FindProperty("btnPrevStage").objectReferenceValue = btnPrevStage;
             so.FindProperty("btnNextStage").objectReferenceValue = btnNextStage;
             AssignButtonArray(so, "liveToggleButtons", liveToggleBtns);
@@ -321,6 +342,81 @@ namespace FrifloECSDemo.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
 
             SaveAndDestroyPrefab(root, $"{UiPrefabDir}/UIFight.prefab");
+        }
+
+        private static void BuildUIRoguelikeCardPrefab(Font font)
+        {
+            GameObject root = CreateFullScreenRoot("UIRoguelikeCard");
+            Image mask = root.AddComponent<Image>();
+            mask.color = new Color(0f, 0f, 0f, 0.72f);
+
+            var view = root.AddComponent<UIRoguelikeCardView>();
+
+            GameObject modal = CreatePanel(root.transform, "CardModal", new Vector2(1000, 520), new Color(0.08f, 0.11f, 0.18f, 0.96f));
+            SetAnchorCenter(modal.GetComponent<RectTransform>(), Vector2.zero);
+
+            Text txtHeader = CreateText(modal.transform, "TxtModalTitle", "小队升级 · 三选一肉鸽词条", font, 28, FontStyle.Bold, new Color(0.99f, 0.88f, 0.28f), TextAnchor.MiddleCenter);
+            SetRect(txtHeader.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -40f), new Vector2(920f, 44f));
+
+            Text txtSub = CreateText(modal.transform, "TxtModalHint", "选择词条立即热注入 UnitBuffs / SquadSkillModifiers，实时改变 8 步伤害管线与多形态弹道", font, 16, FontStyle.Normal, new Color(0.75f, 0.82f, 0.92f), TextAnchor.MiddleCenter);
+            SetRect(txtSub.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -76f), new Vector2(920f, 28f));
+
+            Color[] stripeColors =
+            {
+                new Color(0.22f, 0.74f, 0.97f, 1f),
+                new Color(0.96f, 0.62f, 0.04f, 1f),
+                new Color(0.66f, 0.33f, 0.97f, 1f),
+            };
+
+            Button[] cardButtons = new Button[3];
+            Text[] tagTexts = new Text[3];
+            Text[] titleTexts = new Text[3];
+            Text[] descTexts = new Text[3];
+
+            for (int i = 0; i < 3; i++)
+            {
+                float x = -316f + i * 316f;
+                GameObject cardGo = CreatePanel(modal.transform, $"Card_{i}", new Vector2(292, 316), new Color(0.13f, 0.18f, 0.28f, 0.98f));
+                SetAnchorCenter(cardGo.GetComponent<RectTransform>(), new Vector2(x, -12f));
+
+                var btn = cardGo.AddComponent<Button>();
+                var colors = btn.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(1.14f, 1.14f, 1.14f, 1f);
+                colors.pressedColor = new Color(0.86f, 0.86f, 0.86f, 1f);
+                btn.colors = colors;
+                cardButtons[i] = btn;
+
+                GameObject stripe = CreatePanel(cardGo.transform, "TopStripe", new Vector2(292, 8), stripeColors[i]);
+                SetAnchorTopStretch(stripe.GetComponent<RectTransform>(), 0f, 8f);
+
+                tagTexts[i] = CreateText(cardGo.transform, "TxtTag", "[词条]", font, 18, FontStyle.Bold, stripeColors[i], TextAnchor.MiddleCenter);
+                SetRect(tagTexts[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -38f), new Vector2(256f, 30f));
+
+                titleTexts[i] = CreateText(cardGo.transform, "TxtTitle", "词条名称", font, 22, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+                SetRect(titleTexts[i].rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -86f), new Vector2(264f, 44f));
+
+                descTexts[i] = CreateText(cardGo.transform, "TxtDesc", "词条效果描述", font, 17, FontStyle.Normal, new Color(0.85f, 0.90f, 0.96f), TextAnchor.UpperCenter);
+                descTexts[i].lineSpacing = 1.35f;
+                SetRect(descTexts[i].rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -18f), new Vector2(254f, 132f));
+
+                Text pickHint = CreateText(cardGo.transform, "TxtPickHint", "点击选择此词条", font, 16, FontStyle.Bold, new Color(0.20f, 0.83f, 0.60f), TextAnchor.MiddleCenter);
+                SetRect(pickHint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 28f), new Vector2(254f, 30f));
+            }
+
+            Button btnSkip = CreateButton(modal.transform, "BtnSkip", "暂不选择 / 关闭", font, 18, new Vector2(220, 44), new Color(0.28f, 0.33f, 0.41f, 0.95f));
+            SetRect(btnSkip.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 34f), new Vector2(220f, 44f));
+
+            var so = new SerializedObject(view);
+            so.FindProperty("txtHeader").objectReferenceValue = txtHeader;
+            so.FindProperty("btnSkip").objectReferenceValue = btnSkip;
+            AssignButtonArray(so, "cardButtons", cardButtons);
+            AssignTextArray(so, "cardTagTexts", tagTexts);
+            AssignTextArray(so, "cardTitleTexts", titleTexts);
+            AssignTextArray(so, "cardDescTexts", descTexts);
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            SaveAndDestroyPrefab(root, $"{UiPrefabDir}/UIRoguelikeCard.prefab");
         }
 
         private static void BuildLobbyScene(Material matGround, Material matPedestal, Material matPlayer, Material matAlly)
@@ -574,6 +670,16 @@ namespace FrifloECSDemo.Editor
             for (int i = 0; i < buttons.Length; i++)
             {
                 prop.GetArrayElementAtIndex(i).objectReferenceValue = buttons[i];
+            }
+        }
+
+        private static void AssignTextArray(SerializedObject so, string propName, Text[] texts)
+        {
+            var prop = so.FindProperty(propName);
+            prop.arraySize = texts.Length;
+            for (int i = 0; i < texts.Length; i++)
+            {
+                prop.GetArrayElementAtIndex(i).objectReferenceValue = texts[i];
             }
         }
 

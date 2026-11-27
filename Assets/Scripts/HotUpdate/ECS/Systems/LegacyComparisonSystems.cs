@@ -155,6 +155,7 @@ namespace HotUpdate.ECS.Systems
 
             _aliveIds.Clear();
             bool cullingEnabled = _world.Config.UseFrustumCulling;
+            float alpha = _world.RenderInterpolationAlpha;
 
             Query.ForEachEntity((ref UnitTransform tr, ref CubeVisual vis, Entity entity) =>
             {
@@ -181,8 +182,13 @@ namespace HotUpdate.ECS.Systems
                 }
                 if (!visible) return;
 
-                float yaw = tr.Yaw.ToFloat();
-                view.Tr.SetPositionAndRotation(tr.Position.ToVector3(), yaw != 0f ? Quaternion.Euler(0f, yaw, 0f) : Quaternion.identity);
+                Vector3 pos = alpha == 1f
+                    ? tr.Position.ToVector3()
+                    : Vector3.LerpUnclamped(tr.LastPosition.ToVector3(), tr.Position.ToVector3(), alpha);
+                float yaw = alpha == 1f
+                    ? tr.Yaw.ToFloat()
+                    : Mathf.LerpAngle(tr.LastYaw.ToFloat(), tr.Yaw.ToFloat(), Mathf.Clamp01(alpha));
+                view.Tr.SetPositionAndRotation(pos, yaw != 0f ? Quaternion.Euler(0f, yaw, 0f) : Quaternion.identity);
                 view.Tr.localScale = tr.Scale.ToVector3();
 
                 Color c = vis.BaseColor;

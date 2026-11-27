@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Friflo.Engine.ECS;
 using Friflo.Engine.ECS.Systems;
+using HotUpdate.ECS.Buff;
 using HotUpdate.ECS.Components;
 using HotUpdate.ECS.Config;
 using HotUpdate.ECS.FixedPoint;
@@ -15,18 +16,42 @@ namespace HotUpdate.ECS
 {
     public readonly struct DamageRequest
     {
+        public readonly int AttackerEntityId;
         public readonly int TargetEntityId;
-        public readonly FP Amount;
+        public readonly FP BaseAmount;
+        public readonly bool IsTrueOrDotDamage;
+        public readonly bool ApplyBurnOnHit;
         public readonly UnitStateType ApplyState;
         public readonly FP ApplyStateDuration;
 
-        public DamageRequest(int targetEntityId, FP amount, UnitStateType applyState = UnitStateType.HitFlash, FP applyStateDuration = default)
+        public DamageRequest(
+            int targetEntityId,
+            FP baseAmount,
+            UnitStateType applyState = UnitStateType.HitFlash,
+            FP applyStateDuration = default,
+            int attackerEntityId = 0,
+            bool isTrueOrDotDamage = false,
+            bool applyBurnOnHit = false)
         {
+            AttackerEntityId = attackerEntityId;
             TargetEntityId = targetEntityId;
-            Amount = amount;
+            BaseAmount = baseAmount;
+            IsTrueOrDotDamage = isTrueOrDotDamage;
+            ApplyBurnOnHit = applyBurnOnHit;
             ApplyState = applyState;
             ApplyStateDuration = applyStateDuration;
         }
+    }
+
+    public struct VisualPulseInstance
+    {
+        public Vector3 Origin;
+        public float StartRadius;
+        public float EndRadius;
+        public float Height;
+        public float Duration;
+        public float Elapsed;
+        public Color Color;
     }
 
     public struct BattleSnapshot
@@ -35,10 +60,13 @@ namespace HotUpdate.ECS
         public string OptimizationSummary;
         public float PlayerHp;
         public float PlayerMaxHp;
+        public float PlayerShield;
+        public int PlayerUndyingCharges;
         public int AliveAllies;
         public int TotalAllies;
         public int EnemyCount;
         public int StunnedEnemyCount;
+        public int BurningEnemyCount;
         public int ProjectileCount;
         public int ActiveUnitGameObjects;
         public int CollisionResolvedPairs;
@@ -47,12 +75,17 @@ namespace HotUpdate.ECS
         public int WaveIndex;
         public float WaveCountdown;
         public int TotalKills;
+        public int CritHitCount;
+        public int UndyingTriggerCount;
+        public int SquadLevel;
+        public int SquadExp;
+        public int NextLevelExp;
+        public int AppliedCardCount;
         public double LogicMs;
         public double RenderMs;
         public double GcAllocKbPerFrame;
         public bool PlayerHasSuperArmor;
 
-        // 技能冷却进度（0 = 就绪，0~1 = 剩余冷却比例）
         public float BasicCdRatio;
         public float VolleyCdRatio;
         public float NovaCdRatio;
@@ -60,19 +93,14 @@ namespace HotUpdate.ECS
     }
 
     /// <summary>
-    /// Friflo ECS 确定性战斗世界底座：
-    /// - 严格分离 LogicRoot 与 PresentationRoot；
-    /// - 支持通过 BattleOptimizationConfig 灵活开关四大教学优化（GPU Instancing / 空间哈希网格 / O(K) 分桶脏中心 / 无冗余列表清理）；
-    /// - 提供 ComputeStateHash() 用于帧同步确定性校验。
+    /// Friflo ECS 确定性战斗世界底座（三层 SystemRoot + 六大优化开关 + 8 步伤害管线 + Buff/词条 + 20Hz 帧同步插值/追帧支持）。
     /// </summary>
     public sealed class BattleWorld : IDisposable
     {
         public static readonly FP ArenaHalfSize = FP.FromInt(48);
         public const int SquadAllyCount = 4;
 
-        /// <summary>全局确定性逻辑步长（Q48.16 定点数）。</summary>
         public static FP LogicDeltaTimeFP { get; set; } = FP.FromMilli(50);
-
         public static float LogicDeltaTime => LogicDeltaTimeFP.ToFloat();
 
         public BattleOptimizationConfig Config { get; }
@@ -86,17 +114,34 @@ namespace HotUpdate.ECS
         public PbdCollisionSolver CollisionSolver { get; }
         public ReactiveDirtyHub DirtyHub { get; }
 
+        public SquadSkillModifiers SkillModifiers;
+
         internal readonly List<DamageRequest> PendingDamages = new(512);
         internal readonly List<SpatialEntry> QueryScratch = new(256);
         internal readonly List<int> EntityIdScratch = new(256);
+        internal readonly List<VisualPulseInstance> VisualPulses = new(64);
+
+        public void EnqueueDamage(in DamageRequest req) => PendingDamages.Add(req);
 
         public int PlayerEntityId { get; private set; }
         public FPVector3 PlayerPosition { get; internal set; }
+        public FPVector3 PlayerLastPosition { get; internal set; }
         public int TotalKills { get; internal set; }
+        public int CritHitCount { get; internal set; }
+        public int UndyingTriggerCount { get; internal set; }
 
-        /// <summary>测试或帧同步输入帧可注入定点移动输入；为 null 时自动从键盘采样转入定点。</summary>
+        // Roguelike 经验与升级选卡状态
+        public int SquadLevel { get; internal set; } = 1;
+        public int SquadExp { get; internal set; }
+        public int NextLevelExp { get; internal set; } = 25;
+        public int PendingCardPicks { get; set; }
+        public int AppliedCardCount { get; internal set; }
+
+        // 帧同步追帧与插值控制
+        public bool IsCatchingUp { get; set; }
+        public float RenderInterpolationAlpha { get; set; } = 1f;
+
         public (FP X, FP Y)? OverrideMoveInput { get; set; }
-
         public BattleSnapshot Snapshot => _snapshot;
 
         private readonly Stopwatch _stopwatch = new();
@@ -120,6 +165,7 @@ namespace HotUpdate.ECS
         public BattleWorld(BattleOptimizationConfig config, bool enablePresentation = true)
         {
             Config = config;
+            SkillModifiers = SquadSkillModifiers.CreateDefault();
             _rng = new FPRandom(config.RandomSeed == 0UL ? 2026UL : config.RandomSeed);
             Store = new EntityStore(PidType.UsePidAsId);
             Store.EventRecorder.Enabled = true;
@@ -130,10 +176,11 @@ namespace HotUpdate.ECS
 
             _waveReactiveSystem = new WaveSpawnReactiveSystem(this);
 
-            // 1. 纯逻辑层：按开关动态挂载 优化版 vs 旧版对照组 System
+            // 1. 纯逻辑层
             LogicRoot = new SystemRoot(Store)
             {
                 new SpatialGridBuildSystem(this),
+                new BuffTickSystem(this),
                 new StateUpdateSystem(this),
                 new DamageResolveSystem(this),
                 new PlayerInputSystem(this),
@@ -142,7 +189,6 @@ namespace HotUpdate.ECS
                 new MovementSystem(this),
             };
 
-            // 教学开关 5：PBD 细粒度空间网格硬碰撞解穿透（置入 MovementSystem 之后，防止千军聚集重叠）
             if (config.UseHardCollision)
             {
                 LogicRoot.Add(new PbdCollisionSystem(this));
@@ -151,12 +197,10 @@ namespace HotUpdate.ECS
             LogicRoot.Add(new AutoAttackSystem(this));
             LogicRoot.Add(new AutoSkillSystem(this));
             LogicRoot.Add(new ProjectileSystem(this));
-            LogicRoot.Add(new PulseEffectSystem(this));
             LogicRoot.Add(new WaveDirectorSystem(this));
             LogicRoot.Add(_waveReactiveSystem);
             LogicRoot.Add(new DeathCleanupSystem(this));
 
-            // 教学开关 3：O(K) 分桶脏中心 vs 旧版逐实体闭包 + 每帧 new HashSet/List
             if (config.UseBucketedReactive)
             {
                 _bucketedCombatReactive = new BucketedCombatReactiveSystem();
@@ -168,7 +212,6 @@ namespace HotUpdate.ECS
                 LogicRoot.Add(_legacyCombatReactive);
             }
 
-            // 教学开关 4：无冗余列表清理 vs 旧版维护冗余 List 逐帧 TryGetEntityById + RemoveAt(i)
             if (!config.UseOptimizedCleanup)
             {
                 LogicRoot.Add(new LegacyEntityListCleanupSystem(this));
@@ -176,7 +219,7 @@ namespace HotUpdate.ECS
 
             LogicRoot.SetMonitorPerf(true);
 
-            // 2. 视锥裁切层（第 3 棵 SystemRoot：独立驱动 3D 视锥体剔除，对齐三层 SystemRoot 架构）
+            // 2. 视锥裁切层（第 3 棵 SystemRoot）
             CullingSystem = new FrustumCullingSystem(this, cullPadding: 1.5f);
             CullingRoot = new SystemRoot(Store)
             {
@@ -184,11 +227,10 @@ namespace HotUpdate.ECS
             };
             CullingRoot.SetMonitorPerf(true);
 
-            // 3. 纯表现层：教学开关 1 —— GPU Instancing (0 GameObject) vs 每实体真实 GameObject Cube
+            // 3. 纯表现层
             if (enablePresentation)
             {
                 PresentationRoot = new SystemRoot(Store);
-                // 相机跟随置于渲染前，确保同帧视锥裁切使用的是最新相机位姿
                 PresentationRoot.Add(new CameraFollowSystem(this));
                 if (config.UseGpuInstancing)
                 {
@@ -204,7 +246,41 @@ namespace HotUpdate.ECS
             }
         }
 
-        // ================= 空间查询统一路由（教学开关 2：SpatialGrid O(N) vs BruteForce O(N^2)） =================
+        // ================= 确定性随机与选卡接口 =================
+
+        public bool RollCrit(FP critRate)
+        {
+            if (critRate.RawValue <= 0L) return false;
+            if (critRate >= FP.One) return true;
+            return _rng.NextFP01() < critRate;
+        }
+
+        public void DrawThreeRoguelikeCards(RoguelikeCardDef[] buffer)
+        {
+            RoguelikeCardCatalog.DrawThree(ref _rng, buffer);
+        }
+
+        public void ApplyRoguelikeCard(RoguelikeCardId cardId)
+        {
+            RoguelikeCardCatalog.ApplyCard(this, cardId);
+            if (PendingCardPicks > 0) PendingCardPicks--;
+            RefreshSnapshot();
+        }
+
+        internal void GrantSquadExp(int exp)
+        {
+            if (exp <= 0) return;
+            SquadExp += exp;
+            while (SquadExp >= NextLevelExp)
+            {
+                SquadExp -= NextLevelExp;
+                SquadLevel++;
+                NextLevelExp = 25 + (SquadLevel - 1) * 18;
+                PendingCardPicks++;
+            }
+        }
+
+        // ================= 空间查询路由 =================
 
         public int SpatialEntryCount => Config.UseSpatialGrid ? Grid.Count : BruteForceIndex.Count;
 
@@ -240,7 +316,22 @@ namespace HotUpdate.ECS
             return BruteForceIndex.ComputeSeparation(selfEntityId, origin, desiredSeparation, team, maxNeighbors);
         }
 
-        // ================= 战场生成与主循环 =================
+        // ================= 渲染插值快照 =================
+
+        /// <summary>
+        /// 在每帧逻辑步进前记录所有单位/弹道的上帧坐标，供 20Hz -> 60fps 平滑渲染插值。
+        /// </summary>
+        public void SnapshotPreviousPositions()
+        {
+            PlayerLastPosition = PlayerPosition;
+            Store.Query<UnitTransform>().ForEachEntity((ref UnitTransform tr, Entity _) =>
+            {
+                tr.LastPosition = tr.Position;
+                tr.LastYaw = tr.Yaw;
+            });
+        }
+
+        // ================= 战场初始化与刷怪 =================
 
         public void SpawnInitialBattle(int initialEnemies = 300)
         {
@@ -260,6 +351,7 @@ namespace HotUpdate.ECS
                 SpawnEnemyBatch(initialEnemies);
             }
 
+            SnapshotPreviousPositions();
             RefreshSnapshot();
         }
 
@@ -278,6 +370,7 @@ namespace HotUpdate.ECS
                     attackInterval: FP.FromMilli(350)),
                 new CombatTarget(),
                 UnitState.CreateDefault(),
+                UnitBuffs.CreateSquadDefault(),
                 new SkillCaster
                 {
                     VolleyCooldown = FP.FromInt(3),
@@ -291,12 +384,16 @@ namespace HotUpdate.ECS
                     HealCooldown = FP.FromMilli(7500),
                     HealTimer = FP.FromInt(4),
                     HealAmount = FP.FromInt(90),
+                    TornadoCooldown = FP.FromInt(4),
+                    TornadoTimer = FP.FromMilli(1500),
+                    TornadoDamage = FP.FromInt(42),
                 },
                 new CubeVisual(new Color(0.13f, 0.83f, 0.93f)),
                 Tags.Get<PlayerTag>()
             );
             PlayerEntityId = player.Id;
             PlayerPosition = FPVector3.Zero;
+            PlayerLastPosition = FPVector3.Zero;
 
             FPVector3[] offsets =
             {
@@ -320,6 +417,7 @@ namespace HotUpdate.ECS
                         attackInterval: FP.FromMilli(500)),
                     new CombatTarget(),
                     UnitState.CreateDefault(),
+                    UnitBuffs.CreateSquadDefault(),
                     new AllyFormation(i, offsets[i], leashDistance: FP.FromInt(12)),
                     new SkillCaster
                     {
@@ -329,6 +427,7 @@ namespace HotUpdate.ECS
                         VolleyCount = 3,
                         NovaCooldown = FP.Zero,
                         HealCooldown = FP.Zero,
+                        TornadoCooldown = FP.Zero,
                     },
                     new CubeVisual(new Color(0.23f, 0.51f, 0.96f)),
                     Tags.Get<AllyTag>()
@@ -379,6 +478,7 @@ namespace HotUpdate.ECS
                         attackInterval: FP.FromMilli(900)),
                     new CombatTarget(),
                     initState,
+                    UnitBuffs.CreateEnemyDefault(isElite),
                     new CubeVisual(color),
                     Tags.Get<EnemyTag>()
                 );
@@ -410,8 +510,10 @@ namespace HotUpdate.ECS
         {
             if (_disposed) return;
 
+            SnapshotPreviousPositions();
             float clamped = Mathf.Clamp(deltaTime, 0f, 0.05f);
             UpdateLogicTick(FP.FromFloat(clamped));
+            RenderInterpolationAlpha = 1f;
             UpdatePresentation();
         }
 
@@ -444,7 +546,10 @@ namespace HotUpdate.ECS
                 DirtyHub.TrimBefore(DirtyHub.CurrentSequence);
             }
 
-            RefreshSnapshot();
+            if (!IsCatchingUp)
+            {
+                RefreshSnapshot();
+            }
         }
 
         public void UpdateLogicTick(float fixedDeltaTime) => UpdateLogicTick(FP.FromFloat(fixedDeltaTime));
@@ -454,7 +559,6 @@ namespace HotUpdate.ECS
             if (_disposed || PresentationRoot == null) return;
 
             _stopwatch.Restart();
-            // 先更新视锥裁切（教学开关 6），再提交表现层渲染
             if (Config.UseFrustumCulling)
             {
                 CullingRoot.Update(default);
@@ -478,26 +582,54 @@ namespace HotUpdate.ECS
             }
         }
 
-        public void SpawnProjectile(FPVector3 origin, FPVector3 direction, FP speed, FP damage, FP lifeTime, FP hitRadius, byte team, Color color, int pierceLeft = 0)
+        public void SpawnProjectile(
+            FPVector3 origin,
+            FPVector3 direction,
+            FP speed,
+            FP damage,
+            FP lifeTime,
+            FP hitRadius,
+            byte team,
+            Color color,
+            int attackerEntityId = 0,
+            int pierceLeft = 0,
+            int bounceLeft = 0,
+            ProjectileKind kind = ProjectileKind.Linear,
+            int targetEntityId = 0,
+            FPVector3 targetPos = default,
+            bool applyBurn = false)
         {
             FPVector3 flatDir = direction.NormalizedXZ();
             if (flatDir.SqrMagnitudeXZ().RawValue == 0L) flatDir = FPVector3.Forward;
 
             FP yaw = FPMath.Atan2Deg(flatDir.X, flatDir.Z);
+            FPVector3 scale = kind == ProjectileKind.Tornado
+                ? new FPVector3(FP.FromMilli(1400), FP.FromMilli(2600), FP.FromMilli(1400))
+                : kind == ProjectileKind.Homing
+                    ? new FPVector3(FP.FromMilli(340), FP.FromMilli(340), FP.FromMilli(950))
+                    : new FPVector3(FP.FromMilli(280), FP.FromMilli(280), FP.FromMilli(850));
+
+            FP y = kind == ProjectileKind.Tornado ? FP.FromMilli(1300) : FP.FromMilli(650);
+
             Store.CreateEntity(
-                new UnitTransform(
-                    new FPVector3(origin.X, FP.FromMilli(650), origin.Z),
-                    new FPVector3(FP.FromMilli(280), FP.FromMilli(280), FP.FromMilli(850)),
-                    yaw),
+                new UnitTransform(new FPVector3(origin.X, y, origin.Z), scale, yaw),
                 new ProjectileData
                 {
+                    Kind = kind,
                     Direction = flatDir,
                     Speed = speed,
                     Damage = damage,
                     LifeTime = lifeTime,
                     HitRadius = hitRadius,
                     Team = team,
+                    AttackerEntityId = attackerEntityId,
                     PierceLeft = pierceLeft,
+                    BounceLeft = bounceLeft,
+                    LastHitEntityId = -1,
+                    TargetEntityId = targetEntityId,
+                    LastTargetPos = targetPos,
+                    TickTimer = FP.Zero,
+                    ApplyBurn = applyBurn,
                 },
                 new CubeVisual(color)
             );
@@ -505,23 +637,20 @@ namespace HotUpdate.ECS
 
         public void SpawnPulseEffect(FPVector3 origin, FP startRadius, FP endRadius, FP duration, Color color, FP height = default)
         {
-            if (height.RawValue <= 0L) height = FP.FromMilli(140);
-            FP diameter = startRadius * FP.FromInt(2);
-            Store.CreateEntity(
-                new UnitTransform(
-                    new FPVector3(origin.X, height * FP.Half + FP.FromMilli(30), origin.Z),
-                    new FPVector3(diameter, height, diameter)),
-                new PulseEffect
-                {
-                    Elapsed = FP.Zero,
-                    Duration = duration,
-                    StartRadius = startRadius,
-                    EndRadius = endRadius,
-                    Height = height,
-                    Color = color,
-                },
-                new CubeVisual(color)
-            );
+            // 对应笔记第 6 篇：纯表现脉冲特效绝不写入确定性 EntityStore（不占用实体 ID），且高速追帧/无头模式下直接跳过！
+            if (IsCatchingUp || PresentationRoot == null) return;
+
+            float h = height.RawValue > 0L ? height.ToFloat() : 0.14f;
+            VisualPulses.Add(new VisualPulseInstance
+            {
+                Origin = origin.ToVector3(),
+                StartRadius = startRadius.ToFloat(),
+                EndRadius = endRadius.ToFloat(),
+                Height = h,
+                Duration = Mathf.Max(0.05f, duration.ToFloat()),
+                Elapsed = 0f,
+                Color = color,
+            });
         }
 
         public ulong ComputeStateHash()
@@ -534,11 +663,13 @@ namespace HotUpdate.ECS
 
             hash = Mix(hash, _rng.State);
             hash = Mix(hash, (ulong)TotalKills);
+            hash = Mix(hash, (ulong)SquadLevel);
+            hash = Mix(hash, (ulong)SquadExp);
             hash = Mix(hash, (ulong)PlayerPosition.X.RawValue);
             hash = Mix(hash, (ulong)PlayerPosition.Z.RawValue);
 
-            var unitQuery = Store.Query<UnitTransform, CombatStats, UnitState>();
-            unitQuery.ForEachEntity((ref UnitTransform tr, ref CombatStats stats, ref UnitState st, Entity e) =>
+            var unitQuery = Store.Query<UnitTransform, CombatStats, UnitState, UnitBuffs>();
+            unitQuery.ForEachEntity((ref UnitTransform tr, ref CombatStats stats, ref UnitState st, ref UnitBuffs bf, Entity e) =>
             {
                 hash = Mix(hash, (ulong)e.Id);
                 hash = Mix(hash, (ulong)tr.Position.X.RawValue);
@@ -546,6 +677,8 @@ namespace HotUpdate.ECS
                 hash = Mix(hash, (ulong)tr.Position.Z.RawValue);
                 hash = Mix(hash, (ulong)stats.Hp.RawValue);
                 hash = Mix(hash, st.Mask);
+                hash = Mix(hash, (ulong)bf.Shield.RawValue);
+                hash = Mix(hash, (ulong)bf.BurnStacks);
             });
 
             var projQuery = Store.Query<UnitTransform, ProjectileData>();
@@ -560,12 +693,18 @@ namespace HotUpdate.ECS
             return hash;
         }
 
-        private void RefreshSnapshot()
+        public void RefreshSnapshot()
         {
             _snapshot.StageName = string.IsNullOrEmpty(Config.StageName) ? "自定义组合" : Config.StageName;
             _snapshot.OptimizationSummary = Config.BuildShortTagSummary();
             _snapshot.TotalAllies = SquadAllyCount;
             _snapshot.TotalKills = TotalKills;
+            _snapshot.CritHitCount = CritHitCount;
+            _snapshot.UndyingTriggerCount = UndyingTriggerCount;
+            _snapshot.SquadLevel = SquadLevel;
+            _snapshot.SquadExp = SquadExp;
+            _snapshot.NextLevelExp = NextLevelExp;
+            _snapshot.AppliedCardCount = AppliedCardCount;
             _snapshot.ActiveUnitGameObjects = _gameObjectRenderSystem != null ? _gameObjectRenderSystem.ActiveGameObjectCount : 0;
             _snapshot.CollisionResolvedPairs = Config.UseHardCollision ? CollisionSolver.LastResolvedPairs : 0;
 
@@ -583,6 +722,12 @@ namespace HotUpdate.ECS
                     _snapshot.PlayerHasSuperArmor = st.Has(UnitStateType.SuperArmor);
                 }
 
+                if (player.TryGetComponent<UnitBuffs>(out var bf))
+                {
+                    _snapshot.PlayerShield = bf.Shield.ToFloat();
+                    _snapshot.PlayerUndyingCharges = bf.UndyingCharges;
+                }
+
                 if (player.TryGetComponent<SkillCaster>(out var caster))
                 {
                     _snapshot.VolleyCdRatio = caster.VolleyCooldown.RawValue > 0L ? Mathf.Clamp01((caster.VolleyTimer / caster.VolleyCooldown).ToFloat()) : 0f;
@@ -596,12 +741,15 @@ namespace HotUpdate.ECS
             _snapshot.ProjectileCount = Store.Query<ProjectileData>().Count;
 
             int stunned = 0;
-            var enemyStateQuery = Store.Query<UnitState>().AllTags(Tags.Get<EnemyTag>()).WithoutAllTags(Tags.Get<DeadTag>());
-            enemyStateQuery.ForEachEntity((ref UnitState st, Entity _) =>
+            int burning = 0;
+            var enemyStateQuery = Store.Query<UnitState, UnitBuffs>().AllTags(Tags.Get<EnemyTag>()).WithoutAllTags(Tags.Get<DeadTag>());
+            enemyStateQuery.ForEachEntity((ref UnitState st, ref UnitBuffs bf, Entity _) =>
             {
                 if (st.Has(UnitStateType.Stunned)) stunned++;
+                if (bf.BurnStacks > 0 && bf.BurnTimer.RawValue > 0L) burning++;
             });
             _snapshot.StunnedEnemyCount = stunned;
+            _snapshot.BurningEnemyCount = burning;
 
             var waveQuery = Store.Query<WaveDirector>();
             foreach (var entity in waveQuery.Entities)
@@ -625,6 +773,7 @@ namespace HotUpdate.ECS
             _gameObjectRenderSystem?.Dispose();
             DirtyHub.ClearAllRecords();
             PendingDamages.Clear();
+            VisualPulses.Clear();
             Grid.Clear();
             BruteForceIndex.Clear();
         }

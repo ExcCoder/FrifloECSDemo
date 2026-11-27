@@ -150,6 +150,7 @@ namespace HotUpdate.ECS.Systems
             int batchCount = 0;
             int totalSubmitted = 0;
             bool cullingEnabled = _world.Config.UseFrustumCulling;
+            float alpha = _world.RenderInterpolationAlpha;
 
             Query.ForEachEntity((ref UnitTransform tr, ref CubeVisual vis, Entity entity) =>
             {
@@ -158,9 +159,16 @@ namespace HotUpdate.ECS.Systems
                     return;
                 }
 
-                float yaw = tr.Yaw.ToFloat();
+                Vector3 pos = alpha == 1f
+                    ? tr.Position.ToVector3()
+                    : Vector3.LerpUnclamped(tr.LastPosition.ToVector3(), tr.Position.ToVector3(), alpha);
+
+                float yaw = alpha == 1f
+                    ? tr.Yaw.ToFloat()
+                    : Mathf.LerpAngle(tr.LastYaw.ToFloat(), tr.Yaw.ToFloat(), Mathf.Clamp01(alpha));
+
                 Quaternion rot = yaw != 0f ? Quaternion.Euler(0f, yaw, 0f) : Quaternion.identity;
-                _matrices[batchCount] = Matrix4x4.TRS(tr.Position.ToVector3(), rot, tr.Scale.ToVector3());
+                _matrices[batchCount] = Matrix4x4.TRS(pos, rot, tr.Scale.ToVector3());
 
                 Color c = vis.BaseColor;
                 if (entity.TryGetComponent<UnitState>(out var st))
@@ -183,6 +191,18 @@ namespace HotUpdate.ECS.Systems
                     }
                 }
 
+                if (entity.TryGetComponent<HotUpdate.ECS.Buff.UnitBuffs>(out var bf))
+                {
+                    if (bf.BurnStacks > 0 && bf.BurnTimer.RawValue > 0L)
+                    {
+                        c = Color.Lerp(c, new Color(1.0f, 0.36f, 0.05f), 0.45f);
+                    }
+                    else if (bf.Shield.RawValue > 0L && !entity.Tags.Has<EnemyTag>())
+                    {
+                        c = Color.Lerp(c, new Color(0.55f, 0.95f, 1.0f), 0.22f);
+                    }
+                }
+
                 _colors[batchCount] = new Vector4(c.r, c.g, c.b, c.a);
                 totalSubmitted++;
 
@@ -192,6 +212,40 @@ namespace HotUpdate.ECS.Systems
                     batchCount = 0;
                 }
             });
+
+            // 同步渲染纯表现侧脉冲环（不占用确定性 EntityStore ID，追帧期间自动跳过）
+            var pulses = _world.VisualPulses;
+            float dt = Time.deltaTime;
+            for (int i = pulses.Count - 1; i >= 0; i--)
+            {
+                var p = pulses[i];
+                p.Elapsed += dt;
+                if (p.Elapsed >= p.Duration)
+                {
+                    pulses.RemoveAt(i);
+                    continue;
+                }
+                pulses[i] = p;
+
+                float t = Mathf.Clamp01(p.Elapsed / p.Duration);
+                float inv = 1f - t;
+                float easeOut = 1f - inv * inv;
+                float radius = Mathf.Lerp(p.StartRadius, p.EndRadius, easeOut);
+                float height = Mathf.Lerp(p.Height, 0.02f, t);
+                float diameter = radius * 2f;
+
+                Vector3 pos = new Vector3(p.Origin.x, height * 0.5f + 0.02f, p.Origin.z);
+                _matrices[batchCount] = Matrix4x4.TRS(pos, Quaternion.identity, new Vector3(diameter, height, diameter));
+                Color col = Color.Lerp(p.Color, p.Color * 0.25f, t);
+                _colors[batchCount] = new Vector4(col.r, col.g, col.b, col.a);
+                totalSubmitted++;
+
+                if (++batchCount == MaxBatchSize)
+                {
+                    FlushBatch(batchCount);
+                    batchCount = 0;
+                }
+            }
 
             if (batchCount > 0)
             {
@@ -246,9 +300,12 @@ namespace HotUpdate.ECS.Systems
                 if (_cachedCamera == null) return;
             }
 
-            Vector3 targetPos = _world.PlayerPosition.ToVector3();
+            float alpha = _world.RenderInterpolationAlpha;
+            Vector3 targetPos = alpha == 1f
+                ? _world.PlayerPosition.ToVector3()
+                : Vector3.LerpUnclamped(_world.PlayerLastPosition.ToVector3(), _world.PlayerPosition.ToVector3(), alpha);
             Vector3 desiredPos = targetPos + _offset;
-            float t = 1f - Mathf.Exp(-8f * Time.deltaTime);
+            float t = 1f - Mathf.Exp(-10f * Time.deltaTime);
             _cachedCamera.transform.position = Vector3.Lerp(_cachedCamera.transform.position, desiredPos, t);
             _cachedCamera.transform.LookAt(targetPos);
         }

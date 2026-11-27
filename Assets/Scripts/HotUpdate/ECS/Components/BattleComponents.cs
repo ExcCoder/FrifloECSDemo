@@ -4,26 +4,33 @@ using UnityEngine;
 
 namespace HotUpdate.ECS.Components
 {
-    // ================= 阵营与状态标签（零体积，用于高速 Archetype 过滤） =================
-
     public struct PlayerTag : ITag { }
     public struct AllyTag : ITag { }
     public struct EnemyTag : ITag { }
     public struct DeadTag : ITag { }
 
-    // ================= 空间与移动纯数据组件（全 Q48.16 定点数） =================
+    public enum ProjectileKind : byte
+    {
+        Linear = 0,   // Free：直线（支持穿透 + 弹射）
+        Homing = 1,   // Precise：精确制导追踪弹
+        Tornado = 2,  // Tornado：慢速移动持续多段 AOE 龙卷风
+    }
 
     public struct UnitTransform : IComponent
     {
         public FPVector3 Position;
+        public FPVector3 LastPosition; // 上一逻辑帧坐标，用于 20Hz -> 60fps 渲染插值与短暂外推
         public FP Yaw;
+        public FP LastYaw;
         public FPVector3 Scale;
 
         public UnitTransform(FPVector3 position, FPVector3 scale, FP yaw = default)
         {
             Position = position;
+            LastPosition = position;
             Scale = scale;
             Yaw = yaw;
+            LastYaw = yaw;
         }
     }
 
@@ -32,7 +39,6 @@ namespace HotUpdate.ECS.Components
         public FPVector3 Value;
         public FP MoveSpeed;
         public FP Radius;
-        /// <summary>反质量（越小越重，主控=0.08 几乎推不动，精英=0.35，普通怪=1.0）。</summary>
         public FP InvMass;
 
         public UnitVelocity(FP moveSpeed, FP radius, FP invMass = default)
@@ -57,8 +63,6 @@ namespace HotUpdate.ECS.Components
             LeashDistance = leashDistance;
         }
     }
-
-    // ================= 战斗属性与索敌组件（全 Q48.16 定点数） =================
 
     public struct CombatStats : IComponent
     {
@@ -87,8 +91,6 @@ namespace HotUpdate.ECS.Components
         public int TargetEntityId;
     }
 
-    // ================= 自动技能与弹道/特效组件 =================
-
     public struct SkillCaster : IComponent
     {
         // 技能1：扇形多发弹幕
@@ -103,21 +105,34 @@ namespace HotUpdate.ECS.Components
         public FP NovaRadius;
         public FP NovaDamage;
 
-        // 技能3：小队治疗光环（恢复血量 + 赋予霸体 SuperArmor）
+        // 技能3：小队治疗光环（恢复血量 + 护盾 + 霸体）
         public FP HealCooldown;
         public FP HealTimer;
         public FP HealAmount;
+
+        // 技能4：龙卷风暴（选卡解锁后自动释放）
+        public FP TornadoCooldown;
+        public FP TornadoTimer;
+        public FP TornadoDamage;
     }
 
     public struct ProjectileData : IComponent
     {
+        public ProjectileKind Kind;
         public FPVector3 Direction;
         public FP Speed;
         public FP Damage;
         public FP LifeTime;
         public FP HitRadius;
         public byte Team; // 0 = 我方小队, 1 = 敌方
+        public int AttackerEntityId;
         public int PierceLeft;
+        public int BounceLeft;
+        public int LastHitEntityId;
+        public int TargetEntityId;
+        public FPVector3 LastTargetPos;
+        public FP TickTimer;
+        public bool ApplyBurn;
     }
 
     public struct PulseEffect : IComponent
@@ -130,12 +145,9 @@ namespace HotUpdate.ECS.Components
         public Color Color;
     }
 
-    // ================= 表现层纯数据组件（无 GameObject 引用） =================
-
     public struct CubeVisual : IComponent
     {
         public Color BaseColor;
-        /// <summary>由 CullingRoot 中的 FrustumCullingSystem 更新；未开启视锥裁切时恒为 true。</summary>
         public bool IsVisible;
 
         public CubeVisual(Color baseColor)
@@ -144,8 +156,6 @@ namespace HotUpdate.ECS.Components
             IsVisible = true;
         }
     }
-
-    // ================= 波次控制器组件（由 ReactiveQuerySystem 监听响应） =================
 
     public struct WaveDirector : IComponent
     {
