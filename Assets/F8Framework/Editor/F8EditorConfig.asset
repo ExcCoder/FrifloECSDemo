@@ -12,4 +12,76 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d20185f55aa8f0d47a4bf03c387dc15a, type: 3}
   m_Name: F8EditorConfig
   m_EditorClassIdentifier: 
-  entries: []
+  entries:
+  - key: LocalizationSettings
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 0
+  - key: CustomToolbar.ToolbarFpsSlider.Value
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 0
+  - key: CustomToolbar.ToolbarTimeSlider.Value
+    stringValue: 
+    intValue: 0
+    floatValue: 1
+    boolValue: 0
+    valueType: 3
+  - key: playmodeplus-lastScene
+    stringValue: Assets/Scenes/Lobby.unity
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 1
+  - key: IsEditorMode
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 0
+  - key: FullPathAssetLoadingKey
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 0
+  - key: FullPathExtensionAssetLoadingKey
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 0
+  - key: ConfigBatchLoadEnabledKey
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 0
+  - key: ExcelBinDataFolderKey
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 0
+  - key: ConfigBatchAppliedOutputPathKey
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 1
+  - key: ConfigBatchAppliedAssetBundleNameKey
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 1
+  - key: AssetBundleNameSuffixKey
+    stringValue: 
+    intValue: 0
+    floatValue: 0
+    boolValue: 0
+    valueType: 0

@@ -1,0 +1,19 @@
+{
+    "name": "HotUpdate",
+    "rootNamespace": "HotUpdate",
+    "references": [
+        "F8Framework.Core",
+        "F8Framework.Launcher",
+        "F8Framework.F8ExcelDataClass",
+        "Friflo.Engine.Unity"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
