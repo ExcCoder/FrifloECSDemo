@@ -258,11 +258,14 @@ namespace FrifloECSDemo.Editor
             Button btnToggleInterp = CreateButton(lockstepBar.transform, "BtnToggleInterp", "60fps插值: ON", font, 16, new Vector2(272, 40), new Color(0.06f, 0.58f, 0.40f, 0.95f));
             SetAnchorCenter(btnToggleInterp.GetComponent<RectTransform>(), new Vector2(142f, 23f));
 
-            Button btnFastForward = CreateButton(lockstepBar.transform, "BtnFastForward", "快进追帧 10s (200帧)", font, 16, new Vector2(272, 40), new Color(0.15f, 0.39f, 0.92f, 0.96f));
-            SetAnchorCenter(btnFastForward.GetComponent<RectTransform>(), new Vector2(-142f, -23f));
+            Button btnFastForward = CreateButton(lockstepBar.transform, "BtnFastForward", "快进10s(200帧)", font, 15, new Vector2(180, 40), new Color(0.15f, 0.39f, 0.92f, 0.96f));
+            SetAnchorCenter(btnFastForward.GetComponent<RectTransform>(), new Vector2(-190f, -23f));
 
-            Button btnOpenCards = CreateButton(lockstepBar.transform, "BtnOpenCards", "三选一词条 (肉鸽抽卡)", font, 16, new Vector2(272, 40), new Color(0.58f, 0.20f, 0.92f, 0.96f));
-            SetAnchorCenter(btnOpenCards.GetComponent<RectTransform>(), new Vector2(142f, -23f));
+            Button btnToggleAutoLevelUp = CreateButton(lockstepBar.transform, "BtnToggleAutoLevelUp", "自动升级: OFF", font, 15, new Vector2(180, 40), new Color(0.58f, 0.16f, 0.20f, 0.95f));
+            SetAnchorCenter(btnToggleAutoLevelUp.GetComponent<RectTransform>(), new Vector2(0f, -23f));
+
+            Button btnOpenCards = CreateButton(lockstepBar.transform, "BtnOpenCards", "手动三选一抽卡", font, 15, new Vector2(180, 40), new Color(0.58f, 0.20f, 0.92f, 0.96f));
+            SetAnchorCenter(btnOpenCards.GetComponent<RectTransform>(), new Vector2(190f, -23f));
 
             // 顶部中央波次横幅
             GameObject waveBox = CreatePanel(root.transform, "TopCenterWave", new Vector2(560, 56), new Color(0.06f, 0.09f, 0.16f, 0.80f));
@@ -329,6 +332,7 @@ namespace FrifloECSDemo.Editor
             so.FindProperty("btnToggleLockstep").objectReferenceValue = btnToggleLockstep;
             so.FindProperty("btnToggleInterp").objectReferenceValue = btnToggleInterp;
             so.FindProperty("btnFastForward").objectReferenceValue = btnFastForward;
+            so.FindProperty("btnToggleAutoLevelUp").objectReferenceValue = btnToggleAutoLevelUp;
             so.FindProperty("btnOpenCards").objectReferenceValue = btnOpenCards;
             so.FindProperty("btnPrevStage").objectReferenceValue = btnPrevStage;
             so.FindProperty("btnNextStage").objectReferenceValue = btnNextStage;

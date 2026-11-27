@@ -19,6 +19,7 @@ namespace HotUpdate.Procedure
     public class FightProcedure : ProcedureNode
     {
         public bool IsPaused { get; private set; }
+        public bool AutoLevelUpEnabled { get; private set; } = false;
         public BattleWorld World { get; private set; }
         public LockstepRunner Lockstep { get; } = new LockstepRunner();
 
@@ -48,8 +49,9 @@ namespace HotUpdate.Procedure
 
             Lockstep.TickRenderFrame(World, Time.deltaTime);
 
-            // 升级触发肉鸽三选一弹窗（不与系统暂停菜单冲突）
-            if (World.PendingCardPicks > 0
+            // 仅在开启“自动升级开关”时，升级才自动暂停并弹出肉鸽三选一（默认关闭以免打断性能压测演示）
+            if (AutoLevelUpEnabled
+                && World.PendingCardPicks > 0
                 && !FF8.UI.Has(UIID.UIRoguelikeCard)
                 && !FF8.UI.Has(UIID.UIGameMenu))
             {
@@ -117,6 +119,19 @@ namespace HotUpdate.Procedure
             Lockstep.EnableInterpolation = !Lockstep.EnableInterpolation;
         }
 
+        public void ToggleAutoLevelUp()
+        {
+            AutoLevelUpEnabled = !AutoLevelUpEnabled;
+            if (World != null)
+            {
+                World.AutoLevelUpEnabled = AutoLevelUpEnabled;
+                if (!AutoLevelUpEnabled)
+                {
+                    World.PendingCardPicks = 0;
+                }
+            }
+        }
+
         public double TriggerFastForwardCatchup(int frames = 200)
         {
             if (World == null) return 0;
@@ -177,6 +192,7 @@ namespace HotUpdate.Procedure
             DisposeWorld();
             Lockstep.Reset();
             World = new BattleWorld(config, enablePresentation: true);
+            World.AutoLevelUpEnabled = AutoLevelUpEnabled;
             World.SpawnInitialBattle(initialEnemies: config.InitialEnemyCount);
         }
 

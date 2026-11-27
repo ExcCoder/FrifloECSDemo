@@ -31,6 +31,7 @@ namespace HotUpdate.UI
         [SerializeField] private Button btnToggleLockstep;
         [SerializeField] private Button btnToggleInterp;
         [SerializeField] private Button btnFastForward;
+        [SerializeField] private Button btnToggleAutoLevelUp;
         [SerializeField] private Button btnOpenCards;
         [SerializeField] private Button btnPrevStage;
         [SerializeField] private Button btnNextStage;
@@ -54,6 +55,7 @@ namespace HotUpdate.UI
             if (btnToggleLockstep == null) btnToggleLockstep = transform.Find("LockstepCardBar/BtnToggleLockstep")?.GetComponent<Button>();
             if (btnToggleInterp == null) btnToggleInterp = transform.Find("LockstepCardBar/BtnToggleInterp")?.GetComponent<Button>();
             if (btnFastForward == null) btnFastForward = transform.Find("LockstepCardBar/BtnFastForward")?.GetComponent<Button>();
+            if (btnToggleAutoLevelUp == null) btnToggleAutoLevelUp = transform.Find("LockstepCardBar/BtnToggleAutoLevelUp")?.GetComponent<Button>();
             if (btnOpenCards == null) btnOpenCards = transform.Find("LockstepCardBar/BtnOpenCards")?.GetComponent<Button>();
             if (btnPrevStage == null) btnPrevStage = transform.Find("LiveBenchPanel/BtnPrevStage")?.GetComponent<Button>();
             if (btnNextStage == null) btnNextStage = transform.Find("LiveBenchPanel/BtnNextStage")?.GetComponent<Button>();
@@ -92,6 +94,7 @@ namespace HotUpdate.UI
             BindButton(btnToggleLockstep, OnClickToggleLockstep);
             BindButton(btnToggleInterp, OnClickToggleInterp);
             BindButton(btnFastForward, OnClickFastForward);
+            BindButton(btnToggleAutoLevelUp, OnClickToggleAutoLevelUp);
             BindButton(btnOpenCards, OnClickOpenCards);
             BindButton(btnPrevStage, OnClickPrevStage);
             BindButton(btnNextStage, OnClickNextStage);
@@ -120,6 +123,7 @@ namespace HotUpdate.UI
             UnbindButton(btnToggleLockstep, OnClickToggleLockstep);
             UnbindButton(btnToggleInterp, OnClickToggleInterp);
             UnbindButton(btnFastForward, OnClickFastForward);
+            UnbindButton(btnToggleAutoLevelUp, OnClickToggleAutoLevelUp);
             UnbindButton(btnOpenCards, OnClickOpenCards);
             UnbindButton(btnPrevStage, OnClickPrevStage);
             UnbindButton(btnNextStage, OnClickNextStage);
@@ -177,6 +181,7 @@ namespace HotUpdate.UI
 
             UpdateToggleStyle(btnToggleLockstep, "20Hz帧同步", lockstep.UseLockstep20Hz);
             UpdateToggleStyle(btnToggleInterp, "60fps插值", lockstep.EnableInterpolation);
+            UpdateToggleStyle(btnToggleAutoLevelUp, "自动升级", fightProc.AutoLevelUpEnabled);
 
             UpdateLiveToggleButton(0, "Instancing", cfg.UseGpuInstancing);
             UpdateLiveToggleButton(1, "空间网格", cfg.UseSpatialGrid);
@@ -291,6 +296,15 @@ namespace HotUpdate.UI
             if (FF8.Procedure.PeekProcedureNode(out FightProcedure fp))
             {
                 fp.TriggerFastForwardCatchup(200);
+                RefreshHud();
+            }
+        }
+
+        private void OnClickToggleAutoLevelUp()
+        {
+            if (FF8.Procedure.PeekProcedureNode(out FightProcedure fp))
+            {
+                fp.ToggleAutoLevelUp();
                 RefreshHud();
             }
         }

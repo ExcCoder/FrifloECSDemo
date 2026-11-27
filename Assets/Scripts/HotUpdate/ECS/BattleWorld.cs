@@ -131,6 +131,7 @@ namespace HotUpdate.ECS
         public int UndyingTriggerCount { get; internal set; }
 
         // Roguelike 经验与升级选卡状态
+        public bool AutoLevelUpEnabled { get; set; } = true;
         public int SquadLevel { get; internal set; } = 1;
         public int SquadExp { get; internal set; }
         public int NextLevelExp { get; internal set; } = 25;
@@ -269,7 +270,7 @@ namespace HotUpdate.ECS
 
         internal void GrantSquadExp(int exp)
         {
-            if (exp <= 0) return;
+            if (!AutoLevelUpEnabled || exp <= 0) return;
             SquadExp += exp;
             while (SquadExp >= NextLevelExp)
             {
